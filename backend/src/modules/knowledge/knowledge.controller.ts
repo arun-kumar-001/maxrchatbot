@@ -1,0 +1,45 @@
+import { Controller, Get, Post, Param, Query, Body, UseGuards, Delete } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { KnowledgeService } from './knowledge.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Public } from '../../common/decorators/roles.decorator';
+
+@Controller('knowledge')
+export class KnowledgeController {
+  constructor(private knowledgeService: KnowledgeService) {}
+
+  @Post('upload')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  upload(@Body() body: { content: string; title: string; sourceType?: string }) {
+    return this.knowledgeService.upload(body.content, body.title, body.sourceType);
+  }
+
+  @Post('reindex')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  reindex() {
+    return this.knowledgeService.reindex();
+  }
+
+  @Get('search')
+  @Public()
+  search(@Query('q') query: string, @Query('limit') limit = 5) {
+    return this.knowledgeService.search(query, +limit);
+  }
+
+  @Get()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  findAll() {
+    return this.knowledgeService.findAll();
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  remove(@Param('id') id: string) {
+    return this.knowledgeService.remove(id);
+  }
+}

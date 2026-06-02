@@ -1,0 +1,24 @@
+import { Module } from '@nestjs/common';
+import { ChatController } from './chat.controller';
+import { ChatService } from './chat.service';
+import { ChatGateway } from './chat.gateway';
+import { AIFactory } from '../../core/ai/ai.factory';
+import { OpenAIProvider } from '../../core/ai/openai.provider';
+import { GroqProvider } from '../../core/ai/groq.provider';
+import { PromptInjectionFilter } from '../../core/security/prompt-injection.filter';
+import { SupabaseService } from '../../core/database/supabase.service';
+
+@Module({
+  controllers: [ChatController],
+  providers: [
+    ChatService,
+    ChatGateway,
+    OpenAIProvider,
+    GroqProvider,
+    AIFactory,
+    PromptInjectionFilter,
+    SupabaseService,
+  ],
+  exports: [ChatService, ChatGateway],
+})
+export class ChatModule {}
