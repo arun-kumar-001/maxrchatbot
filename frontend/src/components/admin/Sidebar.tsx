@@ -9,47 +9,41 @@ import {
   BookOpen,
   Settings,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
+  Bot,
+  Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard' },
+  { icon: LayoutDashboard, label: 'Overview', href: '/admin/dashboard' },
   { icon: MessageSquare, label: 'Conversations', href: '/admin/conversations' },
   { icon: Users, label: 'Leads', href: '/admin/leads' },
-  { icon: BookOpen, label: 'Knowledge Base', href: '/admin/knowledge' },
+  { icon: BookOpen, label: 'Knowledge', href: '/admin/knowledge' },
   { icon: Settings, label: 'Settings', href: '/admin/settings' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const logout = useAuthStore((state) => state.logout);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-col border-r bg-card transition-all duration-300",
-        isCollapsed ? "w-16" : "w-64"
-      )}
-    >
-      <div className="flex h-16 items-center justify-between px-4">
-        {!isCollapsed && <span className="text-xl font-bold">MAXR</span>}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="ml-auto"
-        >
-          {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </Button>
+    <aside className="flex w-[240px] shrink-0 flex-col bg-[#0f1419] text-[#e2e8f0]">
+      <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#3276ea] text-white">
+          <Bot size={18} />
+        </div>
+        <div>
+          <span className="text-sm font-semibold text-white tracking-tight">MAXR Studio</span>
+          <p className="text-[10px] text-[#64748b] leading-none mt-0.5">Botpress-style console</p>
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-2 py-4">
+      <nav className="flex-1 space-y-0.5 p-3">
+        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+          Workspace
+        </p>
         {menuItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -57,32 +51,35 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? 'bg-[#3276ea]/15 text-white border-l-2 border-[#3276ea] -ml-px pl-[11px]'
+                  : 'text-[#94a3b8] hover:bg-white/5 hover:text-white',
               )}
             >
-              <item.icon size={20} />
-              {!isCollapsed && <span>{item.label}</span>}
+              <item.icon size={18} className={isActive ? 'text-[#3276ea]' : ''} />
+              <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t p-2">
+      <div className="border-t border-white/10 p-3 space-y-2">
+        <div className="rounded-lg bg-white/5 px-3 py-2.5 flex items-start gap-2">
+          <Sparkles size={14} className="text-[#3276ea] mt-0.5 shrink-0" />
+          <p className="text-[11px] text-[#94a3b8] leading-snug">
+            Widget connected to NestJS + RAG pipeline.
+          </p>
+        </div>
         <Button
           variant="ghost"
-          className={cn(
-            "w-full justify-start gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-destructive",
-            isCollapsed && "justify-center px-0"
-          )}
+          className="w-full justify-start gap-3 text-[#94a3b8] hover:text-white hover:bg-white/5"
           onClick={logout}
         >
-          <LogOut size={20} />
-          {!isCollapsed && <span>Logout</span>}
+          <LogOut size={18} />
+          Sign out
         </Button>
       </div>
-    </div>
+    </aside>
   );
 }

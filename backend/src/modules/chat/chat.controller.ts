@@ -6,6 +6,26 @@ import { ChatService } from './chat.service';
 export class ChatController {
   constructor(private chatService: ChatService) {}
 
+  @Post('widget/conversations')
+  createWidgetConversation(@Body() body: { visitorId?: string }) {
+    return this.chatService.createWidgetConversation(body.visitorId);
+  }
+
+  @Post('widget/message')
+  sendWidgetMessage(@Body() body: { conversationId: string; message: string }) {
+    return this.chatService.sendWidgetMessage(body.conversationId, body.message);
+  }
+
+  @Get('widget/history/:conversationId')
+  getWidgetHistory(@Param('conversationId') conversationId: string) {
+    return this.chatService.getHistory(conversationId);
+  }
+
+  @Post('widget/escalate')
+  escalateWidget(@Body() body: { conversationId: string }) {
+    return this.chatService.escalate(body.conversationId);
+  }
+
   @Post('message')
   @UseGuards(AuthGuard('jwt'))
   async sendMessage(@Body() body: { conversationId: string; message: string }, @Req() req: any) {

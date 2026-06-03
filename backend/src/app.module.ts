@@ -10,11 +10,15 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { HealthModule } from './modules/health/health.module';
+import { FlowsModule } from './flows/flows.module';
+import { BotModule } from './modules/bot/bot.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    FlowsModule,
+    BotModule,
     AuthModule,
     ChatModule,
     LeadsModule,

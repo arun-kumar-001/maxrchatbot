@@ -36,10 +36,19 @@ This guide covers the deployment of the MAXR AI customer support chatbot platfor
 
 ### Option 2: Vercel + Supabase
 
-1. **Frontend**: Connect your repository to Vercel. Next.js 15 is supported out of the box. Configure the environment variables in the Vercel dashboard.
-2. **Backend**: Deploy the NestJS app to a platform like Render, Railway, or a VPS.
-3. **Database & Auth**: Use Supabase for PostgreSQL and Authentication.
-4. **Vector DB**: Use Qdrant Cloud or self-host Qdrant.
+1. **Frontend**: Create a Vercel project and set the root directory to `frontend`.
+2. **Build settings**:
+   - Install command: `npm install`
+   - Build command: `npm run build`
+   - Output directory: `.next`
+3. **Environment variables**: Configure the following in the Vercel dashboard for each environment:
+   - `NEXT_PUBLIC_API_URL` — production backend URL
+   - `NEXT_PUBLIC_WS_URL` — production websocket URL
+4. **Backend**: Deploy the NestJS app separately to Render, Railway, a VPS, or another server.
+5. **Database & Auth**: Use Supabase for PostgreSQL and Authentication.
+6. **Vector DB**: Use Qdrant Cloud or self-host Qdrant.
+
+> Note: The frontend and backend are deployed separately. The frontend reads the backend URL from `NEXT_PUBLIC_API_URL`.
 
 ## CI/CD with GitHub Actions
 

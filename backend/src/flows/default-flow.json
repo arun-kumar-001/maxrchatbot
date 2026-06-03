@@ -1,0 +1,89 @@
+{
+  "id": "main",
+  "name": "Main Flow",
+  "nodes": [
+    { "id": "start", "type": "start", "data": {}, "position": { "x": 80, "y": 200 } },
+    {
+      "id": "welcome",
+      "type": "message",
+      "data": {
+        "text": "Hello! 👋 Welcome to MAXR. I'm your virtual assistant. How can I help you today?"
+      },
+      "position": { "x": 280, "y": 200 }
+    },
+    {
+      "id": "main_menu",
+      "type": "choice",
+      "data": {
+        "text": "Please choose an option:",
+        "choices": [
+          { "id": "opt_support", "label": "Product support" },
+          { "id": "opt_pricing", "label": "Pricing & plans" },
+          { "id": "opt_demo", "label": "Book a demo" },
+          { "id": "opt_human", "label": "Talk to a human" }
+        ]
+      },
+      "position": { "x": 520, "y": 200 }
+    },
+    {
+      "id": "support_ai",
+      "type": "ai",
+      "data": {
+        "prompt": "You are a helpful product support agent. Answer using the knowledge base when possible. Be concise and friendly."
+      },
+      "position": { "x": 780, "y": 80 }
+    },
+    {
+      "id": "pricing_msg",
+      "type": "message",
+      "data": {
+        "text": "We offer Starter ($99/mo), Professional RAG ($299/mo), and Enterprise ($999/mo). All plans include the webchat widget, knowledge base, and analytics. Would you like a custom quote?"
+      },
+      "position": { "x": 780, "y": 200 }
+    },
+    {
+      "id": "capture_email",
+      "type": "capture",
+      "data": {
+        "text": "Great! What's your work email so our team can reach you?",
+        "field": "email",
+        "variable": "email"
+      },
+      "position": { "x": 780, "y": 320 }
+    },
+    {
+      "id": "demo_confirm",
+      "type": "message",
+      "data": {
+        "text": "Thanks! We've noted your email and will contact you within one business day to schedule a demo."
+      },
+      "position": { "x": 1040, "y": 320 }
+    },
+    {
+      "id": "handoff",
+      "type": "handoff",
+      "data": {
+        "text": "I'm connecting you with a human agent. Please hold — someone will join shortly."
+      },
+      "position": { "x": 780, "y": 440 }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "data": { "text": "Thanks for chatting! Have a great day." },
+      "position": { "x": 1300, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "start", "target": "welcome" },
+    { "id": "e2", "source": "welcome", "target": "main_menu" },
+    { "id": "e3", "source": "main_menu", "target": "support_ai", "sourceHandle": "opt_support" },
+    { "id": "e4", "source": "main_menu", "target": "pricing_msg", "sourceHandle": "opt_pricing" },
+    { "id": "e5", "source": "main_menu", "target": "capture_email", "sourceHandle": "opt_demo" },
+    { "id": "e6", "source": "main_menu", "target": "handoff", "sourceHandle": "opt_human" },
+    { "id": "e7", "source": "pricing_msg", "target": "end" },
+    { "id": "e8", "source": "capture_email", "target": "demo_confirm" },
+    { "id": "e9", "source": "demo_confirm", "target": "end" },
+    { "id": "e10", "source": "handoff", "target": "end" }
+  ]
+}

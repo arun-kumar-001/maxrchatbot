@@ -14,7 +14,7 @@ export class QdrantService implements OnModuleInit {
 
   constructor() {
     const url = process.env.QDRANT_URL || 'http://localhost:6333';
-    this.client = new QdrantClient({ url });
+    this.client = new QdrantClient({ url, checkCompatibility: false });
   }
 
   async onModuleInit() {
@@ -27,13 +27,17 @@ export class QdrantService implements OnModuleInit {
   }
 
   async ensureCollection(name: string, vectorSize: number = 1536) {
-    const collections = await this.client.getCollections();
-    const exists = collections.collections.some((c) => c.name === name);
-    if (!exists) {
-      await this.client.createCollection(name, {
-        vectors: { size: vectorSize, distance: 'Cosine' },
-      });
-      this.logger.log(`Created Qdrant collection: ${name}`);
+    try {
+      const collections = await this.client.getCollections();
+      const exists = collections.collections.some((c) => c.name === name);
+      if (!exists) {
+        await this.client.createCollection(name, {
+          vectors: { size: vectorSize, distance: 'Cosine' },
+        });
+        this.logger.log(`Created Qdrant collection: ${name}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Unable to ensure Qdrant collection ${name}: ${err}`);
     }
   }
 
