@@ -1,139 +1,79 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useRegister } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
-const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  name: z.string().optional(),
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type FormData = z.infer<typeof schema>;
 
 export default function RegisterPage() {
+  const register_ = useRegister();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
-  });
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    setIsLoading(true);
-    try {
-      // Mock register for now
-      console.log('Register data:', data);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      toast.success('Registration successful! Please login.');
-      router.push('/login');
-    } catch (error) {
-      toast.error('Failed to register. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  const onSubmit = (data: FormData) => {
+    register_.mutate(data, {
+      onSuccess: () => {
+        toast.success("Account created");
+        router.push("/admin/dashboard");
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.message || "Registration failed");
+      },
+    });
   };
 
   return (
-    <Card className="border-none shadow-lg">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl text-center">Create an account</CardTitle>
-        <CardDescription className="text-center">
-          Enter your details to get started with MAXR
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="John Doe"
-              {...register('name')}
-              disabled={isLoading}
-            />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="name@example.com"
-              {...register('email')}
-              disabled={isLoading}
-            />
+    <div className="min-h-screen flex items-center justify-center bg-muted/30">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl text-center">
+            Create Account
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <Input {...register("name")} placeholder="Name (optional)" />
+            <Input {...register("email")} placeholder="Email" type="email" />
             {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
+              <p className="text-sm text-red-500">{errors.email.message}</p>
             )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
             <Input
-              id="password"
+              {...register("password")}
+              placeholder="Password"
               type="password"
-              {...register('password')}
-              disabled={isLoading}
             />
             {errors.password && (
-              <p className="text-sm text-destructive">{errors.password.message}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              {...register('confirmPassword')}
-              disabled={isLoading}
-            />
-            {errors.confirmPassword && (
-              <p className="text-sm text-destructive">
-                {errors.confirmPassword.message}
+              <p className="text-sm text-red-500">
+                {errors.password.message}
               </p>
             )}
-          </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={register_.isPending}
+            >
+              {register_.isPending ? "Creating..." : "Create Account"}
+            </Button>
+          </form>
         </CardContent>
-        <CardFooter className="flex flex-col gap-4">
-          <Button className="w-full" type="submit" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Create account'}
-          </Button>
-          <div className="text-center text-sm">
-            Already have an account?{' '}
-            <Link href="/login" className="text-primary hover:underline">
-              Login
-            </Link>
-          </div>
-        </CardFooter>
-      </form>
-    </Card>
+      </Card>
+    </div>
   );
 }

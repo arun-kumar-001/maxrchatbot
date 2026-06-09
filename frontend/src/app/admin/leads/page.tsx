@@ -1,134 +1,134 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useLeads, useUpdateLead } from "@/hooks/useLeads";
 import {
   Card,
   CardContent,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Search, Download, Mail, Phone, Calendar } from 'lucide-react';
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 
-const mockLeads = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john@example.com',
-    phone: '+1 234 567 890',
-    source: 'Landing Page Chat',
-    status: 'new',
-    date: '2023-10-25',
-  },
-  {
-    id: '2',
-    name: 'Alice Wonder',
-    email: 'alice@wonderland.com',
-    phone: '+44 7700 900000',
-    source: 'Pricing Page Chat',
-    status: 'contacted',
-    date: '2023-10-24',
-  },
-  {
-    id: '3',
-    name: 'Bob Builder',
-    email: 'bob@build.it',
-    phone: 'N/A',
-    source: 'Support Chat',
-    status: 'qualified',
-    date: '2023-10-23',
-  },
-];
+const statusColors: Record<string, string> = {
+  new: "bg-blue-500",
+  qualified: "bg-green-500",
+  contacted: "bg-yellow-500",
+  converted: "bg-purple-500",
+  closed: "bg-gray-500",
+};
 
 export default function LeadsPage() {
+  const { data: leads, isLoading, error } = useLeads();
+  const updateLead = useUpdateLead();
+
+  const handleStatusChange = (id: string, status: string) => {
+    updateLead.mutate(
+      { id, status },
+      { onSuccess: () => toast.success(`Lead moved to ${status}`) }
+    );
+  };
+
+  const handleExport = () => {
+    if (!leads) return;
+    const csv = [
+      "Name,Email,Phone,Company,Status,Created",
+      ...leads.map(
+        (l: any) =>
+          `${l.name || ""},${l.email || ""},${l.phone || ""},${l.company || ""},${l.status},${l.created_at}`
+      ),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "leads.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Lead Management</h1>
-          <p className="text-muted-foreground">
-            Track and qualify potential customers captured by the AI.
-          </p>
-        </div>
-        <Button>
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
+        <h1 className="text-2xl font-bold">Leads</h1>
+        <Button variant="outline" onClick={handleExport}>
+          <Download className="h-4 w-4 mr-2" /> Export CSV
         </Button>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search leads..." className="pl-10" />
-        </div>
-        <Button variant="outline">Date Range</Button>
-        <Button variant="outline">Status</Button>
-      </div>
+      {error && (
+        <Card className="p-8 text-center">
+          <p className="text-muted-foreground">
+            Unable to load leads. Backend may be offline.
+          </p>
+        </Card>
+      )}
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact Info</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Date Captured</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockLeads.map((lead) => (
-                <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <Mail className="h-3 w-3 mr-1" /> {lead.email}
-                      </div>
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <Phone className="h-3 w-3 mr-1" /> {lead.phone}
-                      </div>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline ({leads?.length ?? 0})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(!leads || leads.length === 0) && (
+              <p className="text-center text-muted-foreground py-8">
+                No leads captured yet.
+              </p>
+            )}
+            <div className="space-y-3">
+              {(leads || []).map((lead: any) => (
+                <div
+                  key={lead.id}
+                  className="flex items-center justify-between p-4 rounded-lg border"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        statusColors[lead.status] || "bg-gray-500"
+                      }`}
+                    />
+                    <div>
+                      <p className="font-medium">
+                        {lead.name || lead.email || "Unknown"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {lead.company ? `${lead.company} · ` : ""}
+                        {lead.email}
+                      </p>
                     </div>
-                  </TableCell>
-                  <TableCell>{lead.source}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        lead.status === 'new'
-                          ? 'default'
-                          : lead.status === 'qualified'
-                          ? 'secondary'
-                          : 'outline'
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={lead.status}
+                      onChange={(e) =>
+                        handleStatusChange(lead.id, e.target.value)
                       }
+                      className="text-sm border rounded px-2 py-1"
                     >
-                      {lead.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center text-sm">
-                      <Calendar className="h-3 w-3 mr-1 text-muted-foreground" />
-                      {lead.date}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline">Details</Button>
-                  </TableCell>
-                </TableRow>
+                      {["new", "qualified", "contacted", "converted", "closed"].map(
+                        (s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
