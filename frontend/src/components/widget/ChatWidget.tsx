@@ -1,64 +1,51 @@
-'use client';
+"use client";
+import { motion, AnimatePresence } from "framer-motion";
+import { MessageCircle, X, Send, Bot, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+import { useChatStore } from "@/store/useChatStore";
+import { useSendMessage } from "@/hooks/useChat";
+import { useState, useRef, useEffect } from "react";
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, User, Bot, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useChatStore } from '@/store/useChatStore';
-import { cn } from '@/lib/utils';
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
 
 export default function ChatWidget() {
-  const { isOpen, toggleChat, messages, addMessage, isTyping, setIsTyping } = useChatStore();
-  const [inputValue, setInputValue] = useState('');
+  const { isOpen, messages, isTyping, toggleChat, conversationId } = useChatStore();
+  const [inputValue, setInputValue] = useState("");
+  const sendMessage = useSendMessage();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isTyping]);
+  }, [messages]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!inputValue.trim()) return;
-
-    const userMessage = {
-      id: Date.now().toString(),
-      role: 'user' as const,
-      content: inputValue,
-      createdAt: new Date().toISOString(),
-    };
-
-    addMessage(userMessage);
-    setInputValue('');
-    setIsTyping(true);
-
-    // Mock AI response
-    setTimeout(() => {
-      const botMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant' as const,
-        content: `Thanks for your message: "${userMessage.content}". This is a mock response from MAXR AI.`,
-        createdAt: new Date().toISOString(),
-      };
-      addMessage(botMessage);
-      setIsTyping(false);
-    }, 1500);
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isTyping) return;
+    const convId = conversationId || crypto.randomUUID();
+    sendMessage.mutate({ conversationId: convId, message: inputValue.trim() });
+    setInputValue("");
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-4">
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="mb-4 flex h-[500px] w-[350px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl sm:w-[400px]"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="w-[380px] h-[600px] bg-background border rounded-xl shadow-2xl flex flex-col overflow-hidden"
           >
-            {/* Header */}
             <div className="flex items-center justify-between bg-primary p-4 text-primary-foreground">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-foreground/20">
@@ -72,17 +59,10 @@ export default function ChatWidget() {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hover:bg-primary-foreground/10 text-primary-foreground"
-                onClick={toggleChat}
-              >
+              <Button variant="ghost" size="icon" className="hover:bg-primary-foreground/10 text-primary-foreground" onClick={toggleChat}>
                 <X size={20} />
               </Button>
             </div>
-
-            {/* Messages */}
             <ScrollArea className="flex-1 p-4" ref={scrollRef}>
               <div className="flex flex-col gap-4">
                 {messages.length === 0 && (
@@ -91,22 +71,9 @@ export default function ChatWidget() {
                     <p>Hello! How can we help you today?</p>
                   </div>
                 )}
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex max-w-[80%] flex-col gap-1",
-                      message.role === 'user' ? "ml-auto items-end" : "mr-auto items-start"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "rounded-2xl px-4 py-2 text-sm",
-                        message.role === 'user'
-                          ? "bg-primary text-primary-foreground rounded-tr-none"
-                          : "bg-muted text-foreground rounded-tl-none"
-                      )}
-                    >
+                {messages.map((message: ChatMessage) => (
+                  <div key={message.id} className={cn("flex max-w-[80%] flex-col gap-1", message.role === 'user' ? "ml-auto items-end" : "mr-auto items-start")}>
+                    <div className={cn("rounded-2xl px-4 py-2 text-sm", message.role === 'user' ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-muted text-foreground rounded-tl-none")}>
                       {message.content}
                     </div>
                     <span className="text-[10px] text-muted-foreground">
@@ -125,18 +92,8 @@ export default function ChatWidget() {
                 )}
               </div>
             </ScrollArea>
-
-            {/* Input */}
-            <form
-              onSubmit={handleSendMessage}
-              className="border-t p-4 flex gap-2 items-center"
-            >
-              <Input
-                placeholder="Type a message..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                className="flex-1"
-              />
+            <form onSubmit={handleSendMessage} className="border-t p-4 flex gap-2 items-center">
+              <Input placeholder="Type a message..." value={inputValue} onChange={(e) => setInputValue(e.target.value)} className="flex-1" />
               <Button type="submit" size="icon" disabled={!inputValue.trim() || isTyping}>
                 <Send size={18} />
               </Button>
@@ -144,8 +101,6 @@ export default function ChatWidget() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Launcher */}
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}

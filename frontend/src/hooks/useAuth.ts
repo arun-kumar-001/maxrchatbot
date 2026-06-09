@@ -7,7 +7,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: { email: string; password: string }) =>
       api.post("/auth/login", data).then((r) => r.data),
-    onSuccess: (data) => {
+    onSuccess: (data: { user: any; accessToken: string }) => {
       setAuth(data.user, data.accessToken);
     },
   });
@@ -18,7 +18,7 @@ export function useRegister() {
   return useMutation({
     mutationFn: (data: { email: string; password: string; name?: string }) =>
       api.post("/auth/register", data).then((r) => r.data),
-    onSuccess: (data) => {
+    onSuccess: (data: { user: any; accessToken: string }) => {
       setAuth(data.user, data.accessToken);
     },
   });
