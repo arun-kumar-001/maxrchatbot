@@ -15,25 +15,32 @@ export function useHealth() {
 export function useSendMessage() {
   const addMessage = useChatStore((s) => s.addMessage);
   const setIsTyping = useChatStore((s) => s.setIsTyping);
-  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { conversationId: string; message: string }) =>
-      api.post("/chat/message", data).then((r) => r.data),
-    onMutate: (variables: { conversationId: string; message: string }) => {
+    mutationFn: ({
+      conversationId,
+      message,
+    }: {
+      conversationId: string;
+      message: string;
+    }) =>
+      api
+        .post("/chat/message", { conversationId, message })
+        .then((r) => r.data),
+    onMutate: async ({ message }) => {
       setIsTyping(true);
       addMessage({
         id: crypto.randomUUID(),
-        role: "user" as const,
-        content: variables.message,
+        role: "user",
+        content: message,
         createdAt: new Date().toISOString(),
       });
     },
-    onSuccess: (data: { reply: string }) => {
+    onSuccess: (data) => {
       setIsTyping(false);
       addMessage({
         id: crypto.randomUUID(),
-        role: "assistant" as const,
+        role: "assistant",
         content: data.reply,
         createdAt: new Date().toISOString(),
       });
@@ -46,7 +53,9 @@ export function useConversations(status?: string) {
   return useQuery({
     queryKey: ["conversations", status],
     queryFn: () =>
-      api.get("/admin/conversations", { params: status ? { status } : {} }).then((r) => r.data),
+      api
+        .get("/admin/conversations", { params: status ? { status } : {} })
+        .then((r) => r.data),
   });
 }
 

@@ -37,9 +37,9 @@ export default function Home() {
                 </p>
               </div>
               <div className="space-x-4">
-                <Link href="/register">
-                  <Button size="lg">Start Free Trial</Button>
-                </Link>
+                <Button asChild size="lg">
+                  <Link href="/register">Start Free Trial</Link>
+                </Button>
                 <Button variant="outline" size="lg">
                   View Demo
                 </Button>

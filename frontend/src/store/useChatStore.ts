@@ -1,5 +1,3 @@
-import { create } from "zustand";
-
 export interface Message {
   id: string;
   role: "user" | "assistant";
