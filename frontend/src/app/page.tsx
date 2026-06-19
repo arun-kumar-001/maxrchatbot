@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Bot, Zap, Shield, Users } from 'lucide-react';
 import ChatWidget from '@/components/widget/ChatWidget';
 
@@ -37,9 +37,9 @@ export default function Home() {
                 </p>
               </div>
               <div className="space-x-4">
-                <Button asChild size="lg">
-                  <Link href="/register">Start Free Trial</Link>
-                </Button>
+                <Link href="/register" className={buttonVariants({ size: 'lg' })}>
+                  Start Free Trial
+                </Link>
                 <Button variant="outline" size="lg">
                   View Demo
                 </Button>
