@@ -4,6 +4,18 @@ import { AIMessage, AIResponse } from '../../core/ai/ai.interface';
 import { PromptInjectionFilter } from '../../core/security/prompt-injection.filter';
 import { SupabaseService } from '../../core/database/supabase.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import {
+  looksMultiIntent,
+  heuristicSplit,
+  normalizeSubqueries,
+  parseJsonArray,
+  mergeDedupeRoundRobin,
+} from './query-decomposition';
+
+/** Max knowledge-base chunks fed to the model as context. */
+const RETRIEVAL_TOP_K = 8;
+/** Per-subquery retrieval depth before merge. */
+const PER_QUERY_LIMIT = 4;
 
 @Injectable()
 export class ChatService {
@@ -26,15 +38,7 @@ export class ChatService {
     // Retrieve relevant knowledge-base context (RAG). Degrades gracefully to
     // no context if the vector store is unavailable.
     const context = await this.retrieveContext(sanitized);
-
-    const systemPrompt =
-      'You are MAXR Assistant, an AI customer support chatbot for MAXR. ' +
-      'Be helpful, concise, and professional. If you need more information, ask clarifying questions.' +
-      (context
-        ? '\n\nUse the following MAXR knowledge base context to answer the question. ' +
-          'If the answer is not in the context, say what you do know and offer to connect the user with the team.\n\n' +
-          `--- KNOWLEDGE BASE ---\n${context}\n--- END ---`
-        : '');
+    const systemPrompt = this.buildSystemPrompt(context);
 
     // Get conversation history
     const history = await this.getHistory(conversationId);
@@ -76,15 +80,7 @@ export class ChatService {
   ): Promise<{ reply: string; confidence: number }> {
     const sanitized = this.promptFilter.sanitize(message);
     const context = await this.retrieveContext(sanitized);
-
-    const systemPrompt =
-      'You are MAXR Assistant, an AI customer support chatbot for MAXR. ' +
-      'Be helpful, concise, and professional. If you need more information, ask clarifying questions.' +
-      (context
-        ? '\n\nUse the following MAXR knowledge base context to answer the question. ' +
-          'If the answer is not in the context, say what you do know and offer to connect the user with the team.\n\n' +
-          `--- KNOWLEDGE BASE ---\n${context}\n--- END ---`
-        : '');
+    const systemPrompt = this.buildSystemPrompt(context);
 
     const recent = history
       .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -118,18 +114,100 @@ export class ChatService {
     return data || [];
   }
 
+  /** Shared system prompt builder so sendMessage and publicReply stay in sync. */
+  private buildSystemPrompt(context: string): string {
+    return (
+      'You are MAXR Assistant, an AI customer support chatbot for MAXR. ' +
+      'Be helpful, concise, and professional. If a question has multiple parts, ' +
+      'answer every part. If you need more information, ask clarifying questions.' +
+      (context
+        ? '\n\nUse the following MAXR knowledge base context to answer the question. ' +
+          'If the answer is not in the context, say what you do know and offer to connect the user with the team.\n\n' +
+          `--- KNOWLEDGE BASE ---\n${context}\n--- END ---`
+        : '')
+    );
+  }
+
   /**
-   * Retrieve top knowledge-base chunks relevant to the user's message and
-   * format them as context. Returns an empty string (and never throws) when
-   * RAG is disabled or no relevant content is found, so chat keeps working.
+   * Decompose a (possibly multi-intent) user message into independent search
+   * subqueries. Uses the LLM when the message looks multi-intent, with a
+   * deterministic heuristic fallback. Always returns at least the original query.
    */
-  private async retrieveContext(query: string, limit = 6): Promise<string> {
+  private async decomposeQuery(query: string): Promise<string[]> {
+    if (!looksMultiIntent(query)) {
+      return [query];
+    }
+
+    // Try LLM decomposition first for robustness.
     try {
-      const results = await this.knowledge.search(query, limit);
-      if (!results || results.length === 0) return '';
-      return results
-        .map((r: any, i: number) => `[${i + 1}] ${r.text}`)
-        .join('\n\n');
+      const prompt: AIMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You split a user message into independent, self-contained search ' +
+            'queries — one per distinct intent/question. Rewrite pronouns into ' +
+            'explicit nouns. Respond with ONLY a JSON array of strings, no prose. ' +
+            'If there is a single intent, return a one-element array.',
+        },
+        { role: 'user', content: query },
+      ];
+      const res = await this.aiFactory.generateWithFallback(prompt, {
+        temperature: 0,
+        maxTokens: 200,
+      });
+      const parsed = parseJsonArray(res.content);
+      const subqueries = normalizeSubqueries(parsed, query);
+      this.logger.log(
+        `Query decomposition (llm): "${query}" -> ${JSON.stringify(subqueries)}`,
+      );
+      return subqueries;
+    } catch (err: any) {
+      const subqueries = heuristicSplit(query);
+      this.logger.warn(
+        `LLM decomposition failed (${err?.message || err}); heuristic split -> ${JSON.stringify(subqueries)}`,
+      );
+      return subqueries;
+    }
+  }
+
+  /**
+   * Retrieve top knowledge-base chunks for a (possibly multi-intent) message.
+   * Decomposes the query, retrieves per subquery, then round-robin merges +
+   * de-duplicates so every intent contributes context. Returns an empty string
+   * (never throws) when RAG is disabled or nothing is found.
+   */
+  private async retrieveContext(query: string): Promise<string> {
+    try {
+      const subqueries = await this.decomposeQuery(query);
+
+      const perQuery = await Promise.all(
+        subqueries.map(async (q) => {
+          const results = await this.knowledge.search(q, PER_QUERY_LIMIT);
+          this.logger.log(
+            `RAG subquery "${q}" -> ${results.length} hits` +
+              (results.length
+                ? ` [${results
+                    .map((r: any) => (r.score != null ? r.score.toFixed(3) : '?'))
+                    .join(', ')}]`
+                : ''),
+          );
+          return results;
+        }),
+      );
+
+      const merged = mergeDedupeRoundRobin(
+        perQuery,
+        RETRIEVAL_TOP_K,
+        (r: any) => r.text,
+      );
+
+      this.logger.log(
+        `RAG retrieval: ${subqueries.length} subquer${subqueries.length === 1 ? 'y' : 'ies'}, ` +
+          `${perQuery.reduce((n, r) => n + r.length, 0)} raw hits, ${merged.length} merged (topK=${RETRIEVAL_TOP_K}).`,
+      );
+
+      if (!merged.length) return '';
+      return merged.map((r: any, i: number) => `[${i + 1}] ${r.text}`).join('\n\n');
     } catch (err: any) {
       this.logger.warn(`RAG context retrieval failed: ${err?.message || err}`);
       return '';
