@@ -65,6 +65,50 @@ export class ChatService {
     return { reply: response.content, confidence: 0.9 };
   }
 
+  /**
+   * Stateless, public chat reply for the anonymous website widget.
+   * Same RAG-grounded prompt as sendMessage, but takes history inline and does
+   * not require auth or persist anything.
+   */
+  async publicReply(
+    message: string,
+    history: AIMessage[] = [],
+  ): Promise<{ reply: string; confidence: number }> {
+    const sanitized = this.promptFilter.sanitize(message);
+    const context = await this.retrieveContext(sanitized);
+
+    const systemPrompt =
+      'You are MAXR Assistant, an AI customer support chatbot for MAXR. ' +
+      'Be helpful, concise, and professional. If you need more information, ask clarifying questions.' +
+      (context
+        ? '\n\nUse the following MAXR knowledge base context to answer the question. ' +
+          'If the answer is not in the context, say what you do know and offer to connect the user with the team.\n\n' +
+          `--- KNOWLEDGE BASE ---\n${context}\n--- END ---`
+        : '');
+
+    const recent = history
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-10);
+
+    const messages: AIMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...recent,
+      { role: 'user', content: sanitized },
+    ];
+
+    try {
+      const response = await this.aiFactory.generateWithFallback(messages);
+      return { reply: response.content, confidence: 0.9 };
+    } catch (err: any) {
+      this.logger.error(`Public AI generation failed: ${err.message}`);
+      return {
+        reply:
+          'I apologize, but I am experiencing a temporary issue. Please try again in a moment, or contact us at sales@maxr.io.',
+        confidence: 0,
+      };
+    }
+  }
+
   async getHistory(conversationId: string) {
     const { data } = await this.supabase.client
       .from('messages')
@@ -79,7 +123,7 @@ export class ChatService {
    * format them as context. Returns an empty string (and never throws) when
    * RAG is disabled or no relevant content is found, so chat keeps working.
    */
-  private async retrieveContext(query: string, limit = 4): Promise<string> {
+  private async retrieveContext(query: string, limit = 6): Promise<string> {
     try {
       const results = await this.knowledge.search(query, limit);
       if (!results || results.length === 0) return '';
