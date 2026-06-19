@@ -11,19 +11,57 @@ export interface QdrantPoint {
 export class QdrantService implements OnModuleInit {
   private readonly logger = new Logger(QdrantService.name);
   private client: QdrantClient;
+  /**
+   * Whether Qdrant is reachable. When false, RAG features are disabled but the
+   * rest of the application keeps working (see KnowledgeService).
+   */
+  private available = false;
 
   constructor() {
     const url = process.env.QDRANT_URL || 'http://localhost:6333';
-    this.client = new QdrantClient({ url });
+    const apiKey = process.env.QDRANT_API_KEY;
+
+    // Hosted Qdrant Cloud requires the API key; local dev typically runs
+    // unauthenticated. Only pass apiKey when present so both modes work.
+    this.client = apiKey
+      ? new QdrantClient({ url, apiKey })
+      : new QdrantClient({ url });
+
+    this.logger.log(
+      `Qdrant client configured for ${url} (${apiKey ? 'authenticated' : 'unauthenticated'} mode)`,
+    );
   }
 
   async onModuleInit() {
     try {
       await this.client.getCollections();
+      this.available = true;
       this.logger.log('Connected to Qdrant');
-    } catch (err) {
-      this.logger.warn('Qdrant not available yet. Will retry on first use.');
+    } catch (err: any) {
+      this.available = false;
+      this.logger.warn(
+        `Qdrant not available (${err?.message || err}). RAG features are disabled; the rest of the app will run normally.`,
+      );
     }
+  }
+
+  /** True when Qdrant responded successfully during startup / last probe. */
+  isAvailable(): boolean {
+    return this.available;
+  }
+
+  /**
+   * Probe Qdrant once and cache the result. Lets callers recover if Qdrant
+   * came up after the backend started.
+   */
+  async ping(): Promise<boolean> {
+    try {
+      await this.client.getCollections();
+      this.available = true;
+    } catch {
+      this.available = false;
+    }
+    return this.available;
   }
 
   async ensureCollection(name: string, vectorSize: number = 1536) {
@@ -33,7 +71,7 @@ export class QdrantService implements OnModuleInit {
       await this.client.createCollection(name, {
         vectors: { size: vectorSize, distance: 'Cosine' },
       });
-      this.logger.log(`Created Qdrant collection: ${name}`);
+      this.logger.log(`Created Qdrant collection: ${name} (size=${vectorSize})`);
     }
   }
 
@@ -54,8 +92,15 @@ export class QdrantService implements OnModuleInit {
     return result.map((r) => ({
       id: String(r.id),
       vector: [],
-      payload: r.payload as Record<string, any>,
+      payload: { ...(r.payload as Record<string, any>), score: r.score },
     }));
+  }
+
+  /** Delete all points belonging to an article (payload article_id match). */
+  async deleteByArticle(collection: string, articleId: string) {
+    await this.client.delete(collection, {
+      filter: { must: [{ key: 'article_id', match: { value: articleId } }] },
+    });
   }
 
   async deleteCollection(name: string) {

@@ -35,17 +35,38 @@ export default function ChatWidget() {
     setInputValue('');
     setIsTyping(true);
 
-    // Mock AI response
-    setTimeout(() => {
-      const botMessage = {
+    // Call the public, RAG-grounded chat endpoint. History is sent inline so
+    // the assistant has short-term context; the endpoint itself is stateless.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    try {
+      const history = [...messages, userMessage].map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const res = await fetch(`${apiUrl}/api/chat/public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage.content, history }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      addMessage({
         id: (Date.now() + 1).toString(),
-        role: 'assistant' as const,
-        content: `Thanks for your message: "${userMessage.content}". This is a mock response from MAXR AI.`,
+        role: 'assistant',
+        content: data.reply || 'Sorry, I could not generate a response.',
         createdAt: new Date().toISOString(),
-      };
-      addMessage(botMessage);
+      });
+    } catch {
+      addMessage({
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content:
+          'Sorry, I am having trouble connecting right now. Please try again, or reach us at sales@maxr.io.',
+        createdAt: new Date().toISOString(),
+      });
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
