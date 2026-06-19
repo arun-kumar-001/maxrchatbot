@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { QdrantService } from '../../core/vector/qdrant.service';
 import { EmbeddingsService } from '../../core/vector/embeddings.service';
 import { SupabaseService } from '../../core/database/supabase.service';
@@ -7,6 +7,8 @@ import { SupabaseService } from '../../core/database/supabase.service';
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
   private readonly COLLECTION = 'knowledge_chunks';
+  /** RAG is enabled only when the Qdrant collection is ready. */
+  private ragEnabled = false;
 
   constructor(
     private qdrant: QdrantService,
@@ -15,10 +17,64 @@ export class KnowledgeService {
   ) {}
 
   async onModuleInit() {
-    await this.qdrant.ensureCollection(this.COLLECTION);
+    // Qdrant must never crash backend startup. If it is unavailable we log a
+    // warning, disable RAG, and let the rest of the application boot normally.
+    try {
+      if (!this.qdrant.isAvailable()) {
+        await this.qdrant.ping();
+      }
+      if (!this.qdrant.isAvailable()) {
+        this.logger.warn(
+          'Qdrant unavailable at startup — RAG features (knowledge upload/search) are disabled.',
+        );
+        return;
+      }
+      await this.qdrant.ensureCollection(
+        this.COLLECTION,
+        this.embeddings.getDimensions(),
+      );
+      this.ragEnabled = true;
+      this.logger.log('RAG features enabled (Qdrant collection ready).');
+    } catch (err: any) {
+      this.ragEnabled = false;
+      this.logger.warn(
+        `Failed to initialize Qdrant collection (${err?.message || err}). RAG features are disabled; backend will continue.`,
+      );
+    }
+  }
+
+  /** Whether knowledge upload/search is currently available. */
+  isRagEnabled(): boolean {
+    return this.ragEnabled;
+  }
+
+  /**
+   * Lazily enable RAG if Qdrant became reachable after startup. Returns true
+   * when RAG can be used.
+   */
+  private async ensureRagReady(): Promise<boolean> {
+    if (this.ragEnabled) return true;
+    if (!(await this.qdrant.ping())) return false;
+    try {
+      await this.qdrant.ensureCollection(
+        this.COLLECTION,
+        this.embeddings.getDimensions(),
+      );
+      this.ragEnabled = true;
+      this.logger.log('RAG features enabled (Qdrant recovered).');
+    } catch {
+      this.ragEnabled = false;
+    }
+    return this.ragEnabled;
   }
 
   async upload(content: string, title: string, sourceType?: string) {
+    if (!(await this.ensureRagReady())) {
+      throw new ServiceUnavailableException(
+        'Knowledge base (vector store) is unavailable. RAG features are disabled.',
+      );
+    }
+
     const { data: article, error } = await this.supabase.client
       .from('knowledge_articles')
       .insert({ title, content, source_type: sourceType || 'text' })
@@ -52,6 +108,12 @@ export class KnowledgeService {
   }
 
   async search(query: string, limit: number = 5) {
+    // Search degrades gracefully: if RAG is unavailable we return no context
+    // rather than throwing, so the chat flow can still answer without it.
+    if (!(await this.ensureRagReady())) {
+      this.logger.warn('search() called while RAG disabled — returning empty results.');
+      return [];
+    }
     const queryEmbedding = await this.embeddings.generateEmbedding(query);
     const results = await this.qdrant.search(this.COLLECTION, queryEmbedding, limit);
     return results.map((r) => ({
@@ -62,6 +124,11 @@ export class KnowledgeService {
   }
 
   async reindex() {
+    if (!(await this.ensureRagReady())) {
+      throw new ServiceUnavailableException(
+        'Knowledge base (vector store) is unavailable. RAG features are disabled.',
+      );
+    }
     const { data: articles } = await this.supabase.client
       .from('knowledge_articles')
       .select('*');

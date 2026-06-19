@@ -5,6 +5,7 @@ import { ChatGateway } from './chat.gateway';
 import { AIFactory } from '../../core/ai/ai.factory';
 import { OpenAIProvider } from '../../core/ai/openai.provider';
 import { GroqProvider } from '../../core/ai/groq.provider';
+import { GeminiProvider } from '../../core/ai/gemini.provider';
 import { PromptInjectionFilter } from '../../core/security/prompt-injection.filter';
 import { SupabaseService } from '../../core/database/supabase.service';
 
@@ -15,6 +16,7 @@ import { SupabaseService } from '../../core/database/supabase.service';
     ChatGateway,
     OpenAIProvider,
     GroqProvider,
+    GeminiProvider,
     AIFactory,
     PromptInjectionFilter,
     SupabaseService,

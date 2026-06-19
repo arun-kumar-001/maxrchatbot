@@ -33,10 +33,11 @@ export class ChatService {
     await this.storeMessage(conversationId, 'user', sanitized);
 
     // Generate AI response
-    const provider = this.aiFactory.getProvider();
+    // Generate AI response with automatic provider fallback
+    // (primary provider → fallback chain on 429 / quota / outage).
     let response: AIResponse;
     try {
-      response = await provider.generateCompletion(messages);
+      response = await this.aiFactory.generateWithFallback(messages);
     } catch (err: any) {
       this.logger.error(`AI generation failed: ${err.message}`);
       await this.storeMessage(conversationId, 'assistant', 'I apologize, but I am experiencing a temporary issue. Please try again or escalate to a human agent.');
