@@ -3,6 +3,7 @@ import { AIFactory } from '../../core/ai/ai.factory';
 import { AIMessage, AIResponse } from '../../core/ai/ai.interface';
 import { PromptInjectionFilter } from '../../core/security/prompt-injection.filter';
 import { SupabaseService } from '../../core/database/supabase.service';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Injectable()
 export class ChatService {
@@ -12,6 +13,7 @@ export class ChatService {
     private aiFactory: AIFactory,
     private promptFilter: PromptInjectionFilter,
     private supabase: SupabaseService,
+    private knowledge: KnowledgeService,
   ) {}
 
   async sendMessage(
@@ -21,10 +23,23 @@ export class ChatService {
   ): Promise<{ reply: string; confidence: number }> {
     const sanitized = this.promptFilter.sanitize(message);
 
+    // Retrieve relevant knowledge-base context (RAG). Degrades gracefully to
+    // no context if the vector store is unavailable.
+    const context = await this.retrieveContext(sanitized);
+
+    const systemPrompt =
+      'You are MAXR Assistant, an AI customer support chatbot for MAXR. ' +
+      'Be helpful, concise, and professional. If you need more information, ask clarifying questions.' +
+      (context
+        ? '\n\nUse the following MAXR knowledge base context to answer the question. ' +
+          'If the answer is not in the context, say what you do know and offer to connect the user with the team.\n\n' +
+          `--- KNOWLEDGE BASE ---\n${context}\n--- END ---`
+        : '');
+
     // Get conversation history
     const history = await this.getHistory(conversationId);
     const messages: AIMessage[] = [
-      { role: 'system', content: 'You are MAXR Assistant, an AI customer support chatbot for MAXR. Be helpful, concise, and professional. If you need more information, ask clarifying questions.' },
+      { role: 'system', content: systemPrompt },
       ...history.map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: sanitized },
     ];
@@ -57,6 +72,24 @@ export class ChatService {
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
     return data || [];
+  }
+
+  /**
+   * Retrieve top knowledge-base chunks relevant to the user's message and
+   * format them as context. Returns an empty string (and never throws) when
+   * RAG is disabled or no relevant content is found, so chat keeps working.
+   */
+  private async retrieveContext(query: string, limit = 4): Promise<string> {
+    try {
+      const results = await this.knowledge.search(query, limit);
+      if (!results || results.length === 0) return '';
+      return results
+        .map((r: any, i: number) => `[${i + 1}] ${r.text}`)
+        .join('\n\n');
+    } catch (err: any) {
+      this.logger.warn(`RAG context retrieval failed: ${err?.message || err}`);
+      return '';
+    }
   }
 
   private async storeMessage(conversationId: string, role: string, content: string, tokens?: number) {

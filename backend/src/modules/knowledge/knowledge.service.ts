@@ -1,4 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { v5 as uuidv5 } from 'uuid';
 import { QdrantService } from '../../core/vector/qdrant.service';
 import { EmbeddingsService } from '../../core/vector/embeddings.service';
 import { SupabaseService } from '../../core/database/supabase.service';
@@ -7,6 +8,12 @@ import { SupabaseService } from '../../core/database/supabase.service';
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
   private readonly COLLECTION = 'knowledge_chunks';
+  /**
+   * Stable namespace for deriving deterministic Qdrant point UUIDs from
+   * `${articleId}-${chunkIndex}`. Qdrant only accepts unsigned-integer or UUID
+   * point IDs, so the raw `uuid-0` string previously used was rejected.
+   */
+  private static readonly POINT_NAMESPACE = '1b671a64-40d5-491e-99b0-da01ff1f3341';
   /** RAG is enabled only when the Qdrant collection is ready. */
   private ragEnabled = false;
 
@@ -91,7 +98,9 @@ export class KnowledgeService {
     const embeddings = await this.embeddings.generateEmbeddings(chunks);
 
     const points = chunks.map((chunk, i) => ({
-      id: `${articleId}-${i}`,
+      // Qdrant requires a UUID or unsigned-integer point id. Derive a stable
+      // UUID from the article id + chunk index so re-indexing overwrites in place.
+      id: uuidv5(`${articleId}-${i}`, KnowledgeService.POINT_NAMESPACE),
       vector: embeddings[i],
       payload: { article_id: articleId, text: chunk, chunk_index: i },
     }));
@@ -149,6 +158,15 @@ export class KnowledgeService {
   }
 
   async remove(id: string) {
+    // Best-effort removal of the article's vectors so Qdrant doesn't keep
+    // orphaned points; never block deletion of the relational rows on it.
+    if (await this.ensureRagReady()) {
+      try {
+        await this.qdrant.deleteByArticle(this.COLLECTION, id);
+      } catch (err: any) {
+        this.logger.warn(`Failed to delete Qdrant vectors for article ${id}: ${err?.message || err}`);
+      }
+    }
     await this.supabase.client.from('knowledge_chunks').delete().eq('article_id', id);
     await this.supabase.client.from('knowledge_articles').delete().eq('id', id);
     return { deleted: true };

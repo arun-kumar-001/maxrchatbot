@@ -96,6 +96,13 @@ export class QdrantService implements OnModuleInit {
     }));
   }
 
+  /** Delete all points belonging to an article (payload article_id match). */
+  async deleteByArticle(collection: string, articleId: string) {
+    await this.client.delete(collection, {
+      filter: { must: [{ key: 'article_id', match: { value: articleId } }] },
+    });
+  }
+
   async deleteCollection(name: string) {
     await this.client.deleteCollection(name);
   }
